@@ -18,7 +18,7 @@
 set -euo pipefail
 
 PIN_FILE='third_party/pqclean/PROVENANCE.md'
-EXPECTED='e1ab5c02821be40fd9f73839c0817b9adca212f1'
+EXPECTED='13aaaa68d6b8120fc325054125c791cfc8411f4c'
 
 if [ ! -f "${PIN_FILE}" ]; then
     echo "missing ${PIN_FILE}" >&2
