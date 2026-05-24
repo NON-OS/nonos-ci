@@ -3897,7 +3897,7 @@ abi_registry_files="$(find "${abi_registry_dir}" -maxdepth 1 -name '*.rs' ! -nam
 syscall_defs='src/syscall/numbers/defs.rs'
 convert_src='src/syscall/numbers/convert.rs'
 graphics_park='src/syscall/dispatch/router/graphics_backend.rs'
-router_src='src/syscall/dispatch/router/dispatch_fn.rs'
+router_src='src/syscall/dispatch/router'
 
 if [ -z "${abi_registry_files}" ]; then
     fail_with "missing ${abi_registry_dir} (no per-domain registry files)"
@@ -3906,7 +3906,7 @@ elif ! grep -qE '^[[:space:]]+abi::lookup_id\(' "${convert_src}"; then
 elif grep -qE '^[[:space:]]+[0-9]+[[:space:]]*=>[[:space:]]*Some\(Self::' "${convert_src}"; then
     fail_with "${convert_src} carries a parallel numeric match table; route through the registry"
 else
-    enum_variants="$(awk '/^pub enum SyscallNumber/{f=1; next} f && /^}/{exit} f && /^[[:space:]]+[A-Z][A-Za-z0-9]+[[:space:]]*=/{print $1}' "${syscall_defs}" | tr -d ',' | sort -u)"
+    enum_variants="$(sed -n '/^pub enum SyscallNumber/,/^}/p' "${syscall_defs}" | grep -oE '[A-Z][A-Za-z0-9]+ *= *tag4' | awk '{print $1}' | sort -u)"
     registry_variants="$(cat ${abi_registry_files} | grep -oE 'SyscallNumber::[A-Za-z0-9]+' | sed 's/.*:://' | sort)"
     registry_unique="$(printf '%s\n' "${registry_variants}" | sort -u)"
     if [ "${registry_variants}" != "${registry_unique}" ]; then
@@ -3946,7 +3946,7 @@ if [ -n "${abi_registry_files}" ] && [ -f "${router_src}" ] && [ -f "${graphics_
     routed_variants="$(grep -hE '^[[:space:]]+[er]\(b"' ${non_graphics_files} 2>/dev/null | grep -oE 'SyscallNumber::[A-Za-z0-9]+' | sed 's/.*:://' | sort -u)"
     routed_missing=""
     for v in ${routed_variants}; do
-        if ! grep -qE "SyscallNumber::${v}\b" "${router_src}"; then
+        if ! grep -rqE "SyscallNumber::${v}\b" "${router_src}"; then
             routed_missing="${routed_missing} ${v}"
         fi
     done
