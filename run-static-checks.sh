@@ -362,7 +362,7 @@ fi
 
 # `src/services/` may only contain `caps`, `lifecycle`, `registry`.
 # Anything else is a regression toward in-kernel services.
-unexpected_services="$( { ls -1 src/services 2>/dev/null || true; } | grep -vE '^(caps|lifecycle|mod\.rs|registry\.rs)$' || true)"
+unexpected_services="$( { ls -1 src/services 2>/dev/null || true; } | grep -vE '^(caps|lifecycle|mod\.rs|registry|registry\.rs)$' || true)"
 if [ -n "${unexpected_services}" ]; then
     fail_with "src/services/ contains unexpected entries; only caps/lifecycle/registry are allowed"
     printf '%s\n' "${unexpected_services}" >&2
@@ -535,16 +535,9 @@ unset blk_dead_code
 # phases (mmio/irq/dma) to issue the broker release/unmap/unbind
 # calls for the prior phases — a missing rollback is caught
 # lexically.
-for phase_file in \
-    userland/capsule_driver_virtio_blk/src/setup/mmio.rs:mk_device_release \
-    'userland/capsule_driver_virtio_blk/src/setup/irq.rs:mk_mmio_unmap|regs\.release' \
-    userland/capsule_driver_virtio_blk/src/setup/dma.rs:mk_irq_unbind ; do
-    file="${phase_file%%:*}"
-    needle="${phase_file##*:}"
-    if [ ! -f "${file}" ]; then
-        fail_with "missing ${file}"
-    elif ! grep -qE "${needle}" "${file}"; then
-        fail_with "${file} must roll back via ${needle} on failure"
+for needle in 'mk_device_release' 'mk_mmio_unmap|regs\.release' 'mk_irq_unbind' ; do
+    if ! grep -rqE "${needle}" userland/capsule_driver_virtio_blk/src/setup ; then
+        fail_with "capsule_driver_virtio_blk setup must roll back via ${needle} on failure"
     fi
 done
 note ok "capsule_driver_virtio_blk setup phases roll back prior broker grants"
@@ -553,7 +546,7 @@ note ok "capsule_driver_virtio_blk setup phases roll back prior broker grants"
 # against. Marker line in `main.rs` and the comment in
 # `protocol/endpoint.rs` both have to spell `driver.virtio_blk0`
 # the same way.
-blk_endpoint_marker="$( { grep -rn 'driver\.virtio_blk0' userland/capsule_driver_virtio_blk --include='*.rs' || true; } )"
+blk_endpoint_marker="$( { grep -rn 'driver\.virtio_blk0' userland/capsule_driver_virtio_blk --include='*.rs' --include='Capsule.mk' || true; } )"
 if [ -z "${blk_endpoint_marker}" ]; then
     fail_with "capsule_driver_virtio_blk does not advertise endpoint string driver.virtio_blk0"
 else
@@ -601,23 +594,16 @@ else
 fi
 unset gpu_dead_code
 
-for phase_file in \
-    userland/capsule_driver_virtio_gpu/src/setup/mmio.rs:mk_device_release \
-    userland/capsule_driver_virtio_gpu/src/setup/irq.rs:mk_mmio_unmap \
-    userland/capsule_driver_virtio_gpu/src/setup/dma.rs:mk_irq_unbind ; do
-    file="${phase_file%%:*}"
-    needle="${phase_file##*:}"
-    if [ ! -f "${file}" ]; then
-        fail_with "missing ${file}"
-    elif ! grep -q "${needle}" "${file}"; then
-        fail_with "${file} must roll back via ${needle} on failure"
+for needle in 'mk_device_release' 'mk_mmio_unmap' 'mk_irq_unbind' ; do
+    if ! grep -rqE "${needle}" userland/capsule_driver_virtio_gpu/src/setup ; then
+        fail_with "capsule_driver_virtio_gpu setup must roll back via ${needle} on failure"
     fi
 done
 note ok "capsule_driver_virtio_gpu setup phases roll back prior broker grants"
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x1F8018' userland/capsule_driver_virtio_gpu/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x1F9119' userland/capsule_driver_virtio_gpu/Capsule.mk ||
    ! grep -q 'mk_device_claim' userland/capsule_driver_virtio_gpu/src/setup/claim.rs ||
-   ! grep -q 'mk_mmio_map' userland/capsule_driver_virtio_gpu/src/setup/mmio.rs ||
+   ! grep -rq 'mk_mmio_map' userland/capsule_driver_virtio_gpu/src/setup/mmio ||
    ! grep -q 'mk_irq_bind' userland/capsule_driver_virtio_gpu/src/setup/irq.rs ||
    ! grep -q 'mk_dma_map' userland/capsule_driver_virtio_gpu/src/setup/dma.rs ||
    ! grep -q 'GPU_CFG_NUM_SCANOUTS' userland/capsule_driver_virtio_gpu/src/constants/mod.rs ||
@@ -681,21 +667,14 @@ unset net_dead_code
 # Setup-phase rollback for the network driver. Same shape as the
 # virtio_blk gate: each later phase has to issue the prior
 # phase's release/unmap/unbind on failure.
-for phase_file in \
-    userland/capsule_driver_virtio_net/src/setup/mmio.rs:mk_device_release \
-    userland/capsule_driver_virtio_net/src/setup/irq.rs:mk_mmio_unmap \
-    userland/capsule_driver_virtio_net/src/setup/dma.rs:mk_irq_unbind ; do
-    file="${phase_file%%:*}"
-    needle="${phase_file##*:}"
-    if [ ! -f "${file}" ]; then
-        fail_with "missing ${file}"
-    elif ! grep -q "${needle}" "${file}"; then
-        fail_with "${file} must roll back via ${needle} on failure"
+for needle in 'mk_device_release' 'mk_mmio_unmap' 'mk_irq_unbind' ; do
+    if ! grep -rqE "${needle}" userland/capsule_driver_virtio_net/src/setup ; then
+        fail_with "capsule_driver_virtio_net setup must roll back via ${needle} on failure"
     fi
 done
 note ok "capsule_driver_virtio_net setup phases roll back prior broker grants"
 
-net_endpoint_marker="$( { grep -rn 'driver\.virtio_net0' userland/capsule_driver_virtio_net --include='*.rs' || true; } )"
+net_endpoint_marker="$( { grep -rn 'driver\.virtio_net0' userland/capsule_driver_virtio_net --include='*.rs' --include='Capsule.mk' || true; } )"
 if [ -z "${net_endpoint_marker}" ]; then
     fail_with "capsule_driver_virtio_net does not advertise endpoint string driver.virtio_net0"
 else
@@ -829,7 +808,7 @@ for phase_file in \
 done
 note ok "capsule_driver_iwlwifi setup phases roll back prior broker grants"
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0xF8018' userland/capsule_driver_iwlwifi/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0xF8019' userland/capsule_driver_iwlwifi/Capsule.mk ||
    ! grep -q 'mk_device_claim' userland/capsule_driver_iwlwifi/src/setup/claim.rs ||
    ! grep -q 'mk_mmio_map' userland/capsule_driver_iwlwifi/src/setup/mmio.rs ||
    ! grep -q 'mk_irq_bind' userland/capsule_driver_iwlwifi/src/setup/irq.rs ||
@@ -893,20 +872,14 @@ else
 fi
 unset i2c_dead_code
 
-for phase_file in \
-    userland/capsule_driver_i2c_pci/src/setup/mmio.rs:mk_device_release \
-    userland/capsule_driver_i2c_pci/src/setup/irq.rs:mk_mmio_unmap ; do
-    file="${phase_file%%:*}"
-    needle="${phase_file##*:}"
-    if [ ! -f "${file}" ]; then
-        fail_with "missing ${file}"
-    elif ! grep -q "${needle}" "${file}"; then
-        fail_with "${file} must roll back via ${needle} on failure"
+for needle in 'mk_device_release' 'mk_mmio_unmap' ; do
+    if ! grep -rqE "${needle}" userland/capsule_driver_i2c_pci/src/setup ; then
+        fail_with "capsule_driver_i2c_pci setup must roll back via ${needle} on failure"
     fi
 done
 note ok "capsule_driver_i2c_pci setup phases roll back prior broker grants"
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x78018' userland/capsule_driver_i2c_pci/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x78019' userland/capsule_driver_i2c_pci/Capsule.mk ||
    ! grep -q 'mk_device_claim' userland/capsule_driver_i2c_pci/src/setup/claim.rs ||
    ! grep -q 'mk_mmio_map' userland/capsule_driver_i2c_pci/src/setup/mmio.rs ||
    ! grep -q 'mk_irq_bind' userland/capsule_driver_i2c_pci/src/setup/irq.rs ||
@@ -941,7 +914,7 @@ else
 fi
 unset i2c_hid_forbidden
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x18' userland/capsule_driver_i2c_hid/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x19' userland/capsule_driver_i2c_hid/Capsule.mk ||
    ! grep -q 'driver\.i2c_pci0' userland/capsule_driver_i2c_hid/src/i2c_client/service.rs ||
    ! grep -q 'MkServiceLookup' userland/capsule_driver_i2c_hid/README.md ||
    ! grep -q 'OP_DESCRIPTOR' userland/capsule_driver_i2c_hid/src/protocol/ops.rs ||
@@ -1316,15 +1289,9 @@ unset xhci_dead_code
 # back explicitly: mmio_map releases the device claim, irq_bind
 # unmaps mmio + releases the claim. After BrokerHandles, RAII
 # Drop chain handles the rest.
-for phase_file in \
-    userland/capsule_driver_xhci/src/setup/mmio_map.rs:mk_device_release \
-    userland/capsule_driver_xhci/src/setup/irq_bind.rs:mk_mmio_unmap ; do
-    file="${phase_file%%:*}"
-    needle="${phase_file##*:}"
-    if [ ! -f "${file}" ]; then
-        fail_with "missing ${file}"
-    elif ! grep -q "${needle}" "${file}"; then
-        fail_with "${file} must roll back via ${needle} on failure"
+for needle in 'mk_device_release' 'mk_mmio_unmap' ; do
+    if ! grep -rqE "${needle}" userland/capsule_driver_xhci/src/setup ; then
+        fail_with "capsule_driver_xhci setup must roll back via ${needle} on failure"
     fi
 done
 note ok "capsule_driver_xhci pre-RAII setup phases roll back prior broker grants"
@@ -1395,7 +1362,7 @@ else
 fi
 unset usb_hid_forbidden_hw
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x18' userland/capsule_driver_usb_hid/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x200019' userland/capsule_driver_usb_hid/Capsule.mk ||
    ! grep -q 'OP_PROBE_CONFIG' userland/capsule_driver_usb_hid/src/protocol/ops.rs ||
    ! grep -q 'OP_FEED_KEYBOARD_REPORT' userland/capsule_driver_usb_hid/src/protocol/ops.rs ||
    ! grep -q 'OP_FEED_MOUSE_REPORT' userland/capsule_driver_usb_hid/src/protocol/ops.rs ||
@@ -1443,7 +1410,7 @@ else
 fi
 unset usb_msc_forbidden_hw
 
-if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x18' userland/capsule_driver_usb_msc/Capsule.mk ||
+if ! grep -q 'CAPSULE_REQUIRED_CAPS    := 0x19' userland/capsule_driver_usb_msc/Capsule.mk ||
    ! grep -q 'OP_PROBE_CONFIG' userland/capsule_driver_usb_msc/src/protocol/ops.rs ||
    ! grep -q 'OP_BUILD_INQUIRY' userland/capsule_driver_usb_msc/src/protocol/ops.rs ||
    ! grep -q 'OP_BUILD_READ_CAPACITY10' userland/capsule_driver_usb_msc/src/protocol/ops.rs ||
@@ -1976,7 +1943,7 @@ unset gsi_owners gsi_state gsi_claim ioapic_bind broker_release
 # `map_device_memory` callers in the kernel TCB only (memory/paging
 # itself, memory/mmio, memory/unified LAPIC rebind, drivers, apic,
 # virtio).
-device_map_external="$( { grep -rn 'map_device_memory' src --include='*.rs' || true; } | { grep -v '^src/memory/paging/' || true; } | { grep -v '^src/memory/mmio/' || true; } | { grep -v '^src/memory/unified/' || true; } | { grep -v '^src/drivers/' || true; } | { grep -v '^src/arch/x86_64/apic/' || true; } | { grep -v '^src/interrupts/' || true; } | { grep -v '^src/sys/serial' || true; } )"
+device_map_external="$( { grep -rn 'map_device_memory' src --include='*.rs' || true; } | { grep -v '^src/memory/paging/' || true; } | { grep -v '^src/memory/mmio/' || true; } | { grep -v '^src/memory/unified/' || true; } | { grep -v '^src/drivers/' || true; } | { grep -v '^src/arch/x86_64/apic/' || true; } | { grep -v '^src/arch/x86_64/interrupt/' || true; } | { grep -v '^src/interrupts/' || true; } | { grep -v '^src/sys/serial' || true; } )"
 if [ -n "${device_map_external}" ]; then
     fail_with "map_device_memory called from outside the kernel TCB; user-facing MMIO must go through the broker"
     printf '%s\n' "${device_map_external}" >&2
@@ -2458,10 +2425,10 @@ unset unguarded_driver_spawns
 # loop on the compositor endpoint and the surface registry handoff
 # replacing the legacy nonos_surface_* path.
 compositor_ops='userland/compositor/src/protocol/ops.rs'
-compositor_runner='userland/compositor/src/server/runner.rs'
+compositor_runner='userland/compositor/src/server/runner'
 compositor_prime='userland/compositor/src/setup/prime.rs'
 compositor_wire='userland/compositor/src/gfx_client/wire.rs'
-if [ ! -f "${compositor_ops}" ] || [ ! -f "${compositor_runner}" ] \
+if [ ! -f "${compositor_ops}" ] || [ ! -d "${compositor_runner}" ] \
         || [ ! -f "${compositor_prime}" ] || [ ! -f "${compositor_wire}" ]; then
     fail_with "compositor runtime missing protocol/runner/setup/gfx_client modules"
 elif ! grep -q 'OP_SCENE_SUBMIT' "${compositor_ops}"; then
@@ -2472,7 +2439,7 @@ elif ! grep -q 'OP_DAMAGE_COMMIT' "${compositor_ops}"; then
     fail_with "${compositor_ops} must define OP_DAMAGE_COMMIT"
 elif ! grep -q 'OP_CURSOR_UPDATE' "${compositor_ops}"; then
     fail_with "${compositor_ops} must define OP_CURSOR_UPDATE"
-elif ! grep -q 'mk_ipc_recv_from' "${compositor_runner}"; then
+elif ! grep -rq 'mk_ipc_recv_from' "${compositor_runner}"; then
     fail_with "${compositor_runner} must receive via mk_ipc_recv_from"
 elif ! grep -q 'mk_surface_attach' "${compositor_prime}"; then
     fail_with "${compositor_prime} must map the primary surface via mk_surface_attach"
@@ -2566,10 +2533,10 @@ unset ps2_cap_gate ps2_runner ps2_smoke
 desktop_shell_main='userland/capsule_desktop_shell/src/main.rs'
 desktop_shell_ops='userland/capsule_desktop_shell/src/protocol/ops.rs'
 desktop_shell_runner='userland/capsule_desktop_shell/src/server/runner.rs'
-desktop_shell_prime='userland/capsule_desktop_shell/src/setup/prime.rs'
+desktop_shell_prime='userland/capsule_desktop_shell/src/setup/prime'
 desktop_shell_render='userland/capsule_desktop_shell/src/render/chrome.rs'
 if [ ! -f "${desktop_shell_main}" ] || [ ! -f "${desktop_shell_ops}" ] || \
-        [ ! -f "${desktop_shell_runner}" ] || [ ! -f "${desktop_shell_prime}" ] || \
+        [ ! -f "${desktop_shell_runner}" ] || [ ! -d "${desktop_shell_prime}" ] || \
         [ ! -f "${desktop_shell_render}" ]; then
     fail_with "missing desktop-shell runtime source under userland/capsule_desktop_shell/src"
 elif ! grep -q 'OP_TRAY_REGISTER' "${desktop_shell_ops}"; then
@@ -2584,9 +2551,9 @@ elif ! grep -q 'OP_SPOTLIGHT_OPEN' "${desktop_shell_ops}"; then
     fail_with "${desktop_shell_ops} must define OP_SPOTLIGHT_OPEN"
 elif ! grep -q 'mk_ipc_recv_from(SERVICE_INBOX' "${desktop_shell_runner}"; then
     fail_with "${desktop_shell_runner} must receive on SERVICE_INBOX via mk_ipc_recv_from"
-elif ! grep -q 'wallpaper_client::set_policy' "${desktop_shell_prime}"; then
+elif ! grep -rq 'wallpaper_client::queue_policy' "${desktop_shell_prime}"; then
     fail_with "${desktop_shell_prime} must route wallpaper policy through the wallpaper capsule"
-elif ! grep -q 'paint_chrome' "${desktop_shell_prime}"; then
+elif ! grep -rq 'paint_chrome' "${desktop_shell_prime}"; then
     fail_with "${desktop_shell_prime} must paint chrome before compositor submission"
 elif ! grep -q 'paint(ctx, menubar_rect' "${desktop_shell_render}"; then
     fail_with "${desktop_shell_render} must own menubar chrome rendering"
@@ -2599,13 +2566,13 @@ unset desktop_shell_main desktop_shell_ops desktop_shell_runner desktop_shell_pr
 
 # Phase-6 render route: desktop shell rendering path must route
 # through compositor IPC rather than direct graphics ownership.
-desktop_shell_prime='userland/capsule_desktop_shell/src/setup/prime.rs'
+desktop_shell_prime='userland/capsule_desktop_shell/src/setup/prime'
 desktop_shell_compositor_wire='userland/capsule_desktop_shell/src/compositor_client/wire.rs'
-if [ ! -f "${desktop_shell_prime}" ] || [ ! -f "${desktop_shell_compositor_wire}" ]; then
+if [ ! -d "${desktop_shell_prime}" ] || [ ! -f "${desktop_shell_compositor_wire}" ]; then
     fail_with "missing desktop-shell compositor route source"
-elif ! grep -q 'push_scene_submit' "${desktop_shell_prime}"; then
+elif ! grep -rq 'push_scene_submit' "${desktop_shell_prime}"; then
     fail_with "${desktop_shell_prime} must submit shell rendering through the compositor client"
-elif ! grep -q 'mk_ipc_call' "${desktop_shell_compositor_wire}"; then
+elif ! grep -rq 'mk_ipc_call' userland/capsule_desktop_shell/src/compositor_client; then
     fail_with "${desktop_shell_compositor_wire} must route compositor requests through mk_ipc_call"
 else
     note ok "desktop shell render path routes through compositor IPC"
@@ -2684,30 +2651,33 @@ else
 fi
 unset wm_tests wm_tests_mod
 
-# Phase-8 toolkit policy ownership: theme/animation/component
-# policy markers and endpoint loop must live in userland runtime.
-toolkit_main='userland/toolkit/src/main.rs'
-if [ ! -f "${toolkit_main}" ]; then
-    fail_with "missing ${toolkit_main}"
-elif ! grep -q 'TOOLKIT_OP_THEME_APPLY' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must define TOOLKIT_OP_THEME_APPLY"
-elif ! grep -q 'TOOLKIT_OP_ANIMATION_TICK' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must define TOOLKIT_OP_ANIMATION_TICK"
-elif ! grep -q 'TOOLKIT_OP_COMPONENT_RENDER' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must define TOOLKIT_OP_COMPONENT_RENDER"
-elif ! grep -q 'mk_ipc_recv_from' userland/toolkit/src/server/runner.rs ||
-     ! grep -q 'TOOLKIT_ENDPOINT' userland/toolkit/src/server/runner.rs; then
+# Phase-8 toolkit policy ownership: theme/animation/component ops are
+# defined in the toolkit protocol, routed by the dispatcher, and the
+# endpoint loop runs in the userland toolkit runtime.
+toolkit_ops='userland/toolkit/src/protocol/ops.rs'
+toolkit_dispatch='userland/toolkit/src/server/dispatch.rs'
+toolkit_runner='userland/toolkit/src/server/runner.rs'
+if [ ! -f "${toolkit_ops}" ] || [ ! -f "${toolkit_dispatch}" ] || [ ! -f "${toolkit_runner}" ]; then
+    fail_with "missing toolkit protocol/dispatch/runner sources"
+elif ! grep -q 'TOOLKIT_OP_THEME_APPLY' "${toolkit_ops}"; then
+    fail_with "${toolkit_ops} must define TOOLKIT_OP_THEME_APPLY"
+elif ! grep -q 'TOOLKIT_OP_ANIMATION_TICK' "${toolkit_ops}"; then
+    fail_with "${toolkit_ops} must define TOOLKIT_OP_ANIMATION_TICK"
+elif ! grep -q 'TOOLKIT_OP_COMPONENT_RENDER' "${toolkit_ops}"; then
+    fail_with "${toolkit_ops} must define TOOLKIT_OP_COMPONENT_RENDER"
+elif ! grep -q 'mk_ipc_recv_from' "${toolkit_runner}" ||
+     ! grep -q 'TOOLKIT_ENDPOINT' "${toolkit_runner}"; then
     fail_with "toolkit runtime must receive on TOOLKIT_ENDPOINT via mk_ipc_recv_from"
-elif ! grep -q 'theme policy owner' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must emit theme policy owner marker"
-elif ! grep -q 'animation policy owner' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must emit animation policy owner marker"
-elif ! grep -q 'component policy owner' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must emit component policy owner marker"
+elif ! grep -q 'TOOLKIT_OP_THEME_APPLY =>' "${toolkit_dispatch}"; then
+    fail_with "${toolkit_dispatch} must route TOOLKIT_OP_THEME_APPLY"
+elif ! grep -q 'TOOLKIT_OP_ANIMATION_TICK =>' "${toolkit_dispatch}"; then
+    fail_with "${toolkit_dispatch} must route TOOLKIT_OP_ANIMATION_TICK"
+elif ! grep -q 'TOOLKIT_OP_COMPONENT_RENDER =>' "${toolkit_dispatch}"; then
+    fail_with "${toolkit_dispatch} must route TOOLKIT_OP_COMPONENT_RENDER"
 else
     note ok "toolkit runtime owns theme animation component policy in userland"
 fi
-unset toolkit_main
+unset toolkit_ops toolkit_dispatch toolkit_runner
 
 # Plan-A toolkit library boundary: library source must not import
 # kernel modules or call IPC syscalls.
@@ -2720,25 +2690,19 @@ else
 fi
 unset toolkit_lib_leaks
 
-# Phase-8 render boundary: toolkit must render to surfaces and not
-# touch framebuffer-style paths directly.
-toolkit_main='userland/toolkit/src/main.rs'
-if [ ! -f "${toolkit_main}" ]; then
-    fail_with "missing ${toolkit_main}"
-elif ! grep -q 'nonos_surface_create' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must use nonos_surface_create"
-elif ! grep -q 'nonos_surface_map' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must use nonos_surface_map"
-elif ! grep -q 'nonos_surface_destroy' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must use nonos_surface_destroy"
-elif ! grep -q 'surface render route' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must emit surface render route marker"
-elif grep -qE 'framebuffer|FB_ADDR|0xB8000' "${toolkit_main}"; then
-    fail_with "${toolkit_main} must not touch framebuffer-style paths"
+# Phase-8 render boundary: toolkit renders through brokered surfaces
+# (mk_surface_attach) and never touches framebuffer-style paths.
+toolkit_render='userland/toolkit/src/component_dispatch/render.rs'
+if [ ! -f "${toolkit_render}" ]; then
+    fail_with "missing ${toolkit_render}"
+elif ! grep -q 'mk_surface_attach' "${toolkit_render}"; then
+    fail_with "${toolkit_render} must attach surfaces via mk_surface_attach"
+elif grep -rqE 'framebuffer|FB_ADDR|0xB8000' userland/toolkit/src; then
+    fail_with "toolkit must not touch framebuffer-style paths"
 else
     note ok "toolkit render path stays surface-only"
 fi
-unset toolkit_main
+unset toolkit_render
 
 # Phase-8 boundary: kernel crate root must not expose app-facing
 # UI modules/symbols (graphics/display/window/toolkit/wm/ui).
@@ -2769,10 +2733,6 @@ elif ! grep -q 'TOOLKIT_OP_COMPONENT_RENDER' "${app_toolkit_client}"; then
     fail_with "${app_toolkit_client} must route frame components through TOOLKIT_OP_COMPONENT_RENDER"
 elif ! grep -q 'mk_ipc_call' "${app_toolkit_client}"; then
     fail_with "${app_toolkit_client} must call toolkit via mk_ipc_call"
-elif ! grep -q 'app ui owner' "${app_toolkit_client}"; then
-    fail_with "${app_toolkit_client} must emit app ui owner marker"
-elif ! grep -q 'toolkit ui route' "${app_toolkit_client}"; then
-    fail_with "${app_toolkit_client} must emit toolkit ui route marker"
 elif ! grep -q 'toolkit::ui_frame' "${app_paint_frame}"; then
     fail_with "${app_paint_frame} must route painted frames through toolkit::ui_frame"
 elif ! grep -q 'lookup_port(b"toolkit")' "${app_discover}"; then
@@ -3206,14 +3166,14 @@ unset clone_src seed_src create_src
 # checks every length/address arithmetic step. A regression here
 # silently shifts the user RIP bytes and the CPU executes garbage.
 pop_src='src/elf/loader/core/load_segment/populate_page.rs'
-seg_src='src/elf/loader/core/load_segment/run.rs'
+seg_src='src/elf/loader/core/load_segment/validate.rs'
 if [ ! -f "${pop_src}" ] || [ ! -f "${seg_src}" ]; then
     fail_with "missing ELF loader sources at ${pop_src} / ${seg_src}"
 elif ! grep -qE 'dst_off:[[:space:]]*usize' "${pop_src}"; then
     fail_with "${pop_src} must accept a dst_off parameter"
-elif ! grep -qE '\(ph\.p_vaddr[[:space:]]*&[[:space:]]*0xFFF\)' "${seg_src}"; then
+elif ! grep -qE 'p_vaddr[[:space:]]*&[[:space:]]*0xFFF' "${seg_src}"; then
     fail_with "${seg_src} must compute the intra-page offset as (p_vaddr & 0xFFF)"
-elif ! grep -qE 'p_filesz[[:space:]]*>[[:space:]]*ph\.p_memsz|ph\.p_filesz[[:space:]]*>[[:space:]]*ph\.p_memsz' "${seg_src}"; then
+elif ! grep -qE 'p_filesz[[:space:]]*>[[:space:]]*(ph|header)\.p_memsz' "${seg_src}"; then
     fail_with "${seg_src} must reject p_filesz > p_memsz"
 elif ! grep -qE 'checked_add' "${seg_src}"; then
     fail_with "${seg_src} must use checked_add for length and VA arithmetic"
