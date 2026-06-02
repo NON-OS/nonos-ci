@@ -18,7 +18,7 @@
 set -euo pipefail
 
 PIN_FILE='third_party/pqclean/PROVENANCE.md'
-EXPECTED='dd152ebaa9a001f9eb0d6b9c20dc82f8767335a0'
+EXPECTED='2306482bedca390e1c9e83508a86a81f7f6a83a2'
 
 if [ ! -f "${PIN_FILE}" ]; then
     echo "missing ${PIN_FILE}" >&2
@@ -30,7 +30,9 @@ if ! grep -qE "^PQCLEAN_TREE_SHA=${EXPECTED}\$" "${PIN_FILE}"; then
     exit 1
 fi
 
-ACTUAL="$(git rev-parse HEAD:third_party/pqclean 2>/dev/null || true)"
+ACTUAL="$(git ls-tree -r HEAD third_party/pqclean 2>/dev/null \
+    | grep -v 'third_party/pqclean/PROVENANCE.md' \
+    | git hash-object --stdin 2>/dev/null || true)"
 
 if [ -z "${ACTUAL}" ]; then
     echo "cannot resolve git tree hash for third_party/pqclean" >&2
