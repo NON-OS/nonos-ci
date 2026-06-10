@@ -59,7 +59,11 @@ for prefix in ${CAPSULE_KEY_PREFIXES}; do
 done
 
 echo "[scratch-trust-bootstrap] wiping stale committed policy + certs + manifests"
-rm -f nonos-data/trust/policy/*.bin
+# Only the trust-anchor policy is key-dependent and gets re-sealed with the
+# scratch keys by the kernel build. The zk capsule policy root is the Merkle
+# root over capsule hashes and capability masks, independent of signing keys,
+# and the kernel embeds it at compile time; keep the committed one.
+rm -f nonos-data/trust/policy/nonos_trust_anchor.policy.bin
 rm -f nonos-data/trust/capsules/*.nonos_id_cert.bin
 rm -f nonos-data/trust/capsules/*.manifest.bin
 
