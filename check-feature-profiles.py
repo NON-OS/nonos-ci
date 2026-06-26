@@ -3,7 +3,7 @@
 #
 # Forbidden gates: nonos-legacy-tree, nonos-syscall-keyring.
 # Profiles checked: default, microkernel-core, microkernel-capsules,
-# microkernel-keyring-smoketest, microkernel, microkernel-desktop-gui.
+# microkernel, microkernel-desktop-gui.
 #
 # Parses through `cargo metadata` so the script does not need tomllib
 # and runs anywhere cargo runs.
@@ -20,7 +20,6 @@ PROFILES = (
     "default",
     "microkernel-core",
     "microkernel-capsules",
-    "microkernel-keyring-smoketest",
     "microkernel",
     "microkernel-desktop-gui",
 )

@@ -15,11 +15,17 @@
 
 set -euo pipefail
 
+mode="${NONOS_CI_TRUST_MODE:-scratch}"
+
 mkdir -p .keys
 
 if [ -n "${SIGNING_KEY_BASE64:-}" ]; then
     printf '%s' "${SIGNING_KEY_BASE64}" | base64 -d > .keys/dev-signing.seed
 else
+    if [ "${mode}" = "production" ]; then
+        echo "::error::SIGNING_KEY_BASE64 is required for production CI trust mode"
+        exit 1
+    fi
     echo "::warning::SIGNING_KEY_BASE64 not set; using deterministic fork dev seed"
     printf 'NONOS-CI-FORK-DEV-SEED-32-BYTE!!' > .keys/dev-signing.seed
 fi
@@ -29,4 +35,11 @@ chmod 600 .keys/dev-signing.seed
 if [ "$(wc -c < .keys/dev-signing.seed)" -ne 32 ]; then
     echo "::error::signing key must be 32 bytes"
     exit 1
+fi
+
+cp .keys/dev-signing.seed .keys/signing_key_v1.bin
+chmod 600 .keys/signing_key_v1.bin
+
+if [ -n "${GITHUB_ENV:-}" ]; then
+    printf 'SIGNING_KEY=%s/.keys/signing_key_v1.bin\n' "$(pwd)" >> "$GITHUB_ENV"
 fi
