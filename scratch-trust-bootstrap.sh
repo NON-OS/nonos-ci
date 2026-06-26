@@ -84,7 +84,9 @@ make nonos-mk-libc
 
 echo "[scratch-trust-bootstrap] re-signing capsules: ${CAPSULE_SLUGS}"
 for slug in ${CAPSULE_SLUGS}; do
-    make "nonos-mk-${slug}-sign"
+    make ZK_CAPSULE_ENROLL_SEED=nonos-ci-scratch-capsule-enroll \
+         ZK_CAPSULE_NONCE_SEED=nonos-ci-scratch-capsule-nonce \
+         "nonos-mk-${slug}-sign"
 done
 
 echo "[scratch-trust-bootstrap] done"
