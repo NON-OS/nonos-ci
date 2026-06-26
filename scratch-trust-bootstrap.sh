@@ -33,6 +33,7 @@ mkdir -p .keys
 mkdir -p nonos-data/trust/keys
 mkdir -p nonos-data/trust/policy
 mkdir -p nonos-data/trust/capsules
+mkdir -p target/ci/zk
 
 echo "[scratch-trust-bootstrap] building capsule-sign host tool"
 ( cd nonos-sign && cargo build --release --bin capsule-sign )
@@ -66,6 +67,17 @@ echo "[scratch-trust-bootstrap] wiping stale committed policy + certs + manifest
 rm -f nonos-data/trust/policy/nonos_trust_anchor.policy.bin
 rm -f nonos-data/trust/capsules/*.nonos_id_cert.bin
 rm -f nonos-data/trust/capsules/*.manifest.bin
+
+echo "[scratch-trust-bootstrap] enrolling scratch boot identity"
+printf 'ci-scratch-device\n' > target/ci/zk/device_labels.txt
+make ZK_BOOT_LABELS=target/ci/zk/device_labels.txt \
+     ZK_BOOT_ROOT=target/ci/zk/device_root.bin \
+     ZK_BOOT_COMMITMENTS=target/ci/zk/device_commitments.bin \
+     ZK_BOOT_SECRETS=target/ci/zk/device_secrets.txt \
+     ZK_BOOT_ENROLL_SEED=nonos-ci-scratch-boot-enroll \
+     target/ci/zk/device_root.bin \
+     target/ci/zk/device_commitments.bin \
+     target/ci/zk/device_secrets.txt
 
 echo "[scratch-trust-bootstrap] building userland libc"
 make nonos-mk-libc
