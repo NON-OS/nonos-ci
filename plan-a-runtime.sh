@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Deterministic Plan-A runtime lane.
 # Boots the already-built ESP under TCG with a writable OVMF NVRAM store,
 # a virtio-gpu + virtio-rng device, no host port forwarding, and a
