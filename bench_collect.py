@@ -15,19 +15,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import csv
-import hashlib
-import json
-import os
-import sys
+import csv, hashlib, json, os, sys
 
-if len(sys.argv) != 2:
-    raise SystemExit("usage: bench_collect.py <run-dir>")
+if len(sys.argv) != 2: raise SystemExit("usage: bench_collect.py <run-dir>")
 run_dir = sys.argv[1]
 records = []
-primary = {"host.json", "build-verify-fast.json", "boot-evidence.json", "boot-log.json"}
 for name in sorted(os.listdir(run_dir)):
-    if name not in primary:
+    if not name.endswith(".json") or name == "manifest.json":
         continue
     path = os.path.join(run_dir, name)
     with open(path, encoding="utf-8") as src:
@@ -49,10 +43,13 @@ with open(csv_path, "w", newline="", encoding="utf-8") as out:
             row["name"] = item.get("schema", "")
         writer.writerow(row)
         for key, value in item.get("phase_ms", {}).items():
+            if isinstance(value, dict):
+                for label, field in (("count", "count"), ("min_ms", "min"), ("avg_ms", "avg"), ("max_ms", "max")):
+                    writer.writerow({"name": f"boot.{key}.run_{label}", "status": item.get("status", ""), "elapsed_ms": value.get(field, "")})
+                continue
             writer.writerow({"name": f"boot.{key}", "status": item.get("status", ""), "elapsed_ms": value})
         for key, values in item.get("phase_samples_ms", {}).items():
-            if not values:
-                continue
+            if not values: continue
             writer.writerow({"name": f"boot.{key}.sample_count", "status": item.get("status", ""), "elapsed_ms": len(values)})
             writer.writerow({"name": f"boot.{key}.sample_min_ms", "status": item.get("status", ""), "elapsed_ms": min(values)})
             writer.writerow({"name": f"boot.{key}.sample_max_ms", "status": item.get("status", ""), "elapsed_ms": max(values)})

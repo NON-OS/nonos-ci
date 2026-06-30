@@ -10,29 +10,41 @@
 # the upstream trust anchor — the production-ledger never trusts it.
 #
 # Inputs (env, all optional):
-#   CAPSULE_SLUGS           dash-form slug list, default "proof-io ramfs keyring"
-#                           (matches the embed set of microkernel-capsules)
-#   CAPSULE_KEY_PREFIXES    underscore-form prefix list, default
-#                           auto-derived from CAPSULE_SLUGS (s/-/_/g)
+#   CAPSULE_SLUGS           dash-form slug list, default from Makefile includes
+#   CAPSULE_KEY_PREFIXES    publisher key prefixes, default from Capsule.mk names
 #
 # Idempotent: calling twice produces a different scratch chain. Safe
 # only inside an ephemeral CI workspace.
 
 set -euo pipefail
 
-CAPSULE_SLUGS="${CAPSULE_SLUGS:-proof-io ramfs keyring}"
-
-# Default the prefix list to the slug list with dashes mapped to
-# underscores. capsule-sign and Makefile recipes expect the underscored
-# form for publisher key filenames.
-if [ -z "${CAPSULE_KEY_PREFIXES:-}" ]; then
-    CAPSULE_KEY_PREFIXES="$(echo "${CAPSULE_SLUGS}" | tr '-' '_')"
+if [ -z "${CAPSULE_SLUGS:-}" ] || [ -z "${CAPSULE_KEY_PREFIXES:-}" ]; then
+    capsule_inventory="$(mktemp)"
+    awk '/^include userland\/.*\/Capsule\.mk$/ { print $2 }' Makefile > "${capsule_inventory}"
+    derived_slugs=""
+    derived_prefixes=""
+    while IFS= read -r capsule_mk; do
+        [ -f "${capsule_mk}" ] || { echo "::error::missing ${capsule_mk}"; exit 1; }
+        slug="$(awk -F ':=' '$1 ~ /^[[:space:]]*CAPSULE_SLUG[[:space:]]*$/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "${capsule_mk}")"
+        prefix="$(awk -F ':=' '$1 ~ /^[[:space:]]*CAPSULE_BIN_NAME[[:space:]]*$/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "${capsule_mk}")"
+        [ -n "${slug}" ] || { echo "::error::missing CAPSULE_SLUG in ${capsule_mk}"; exit 1; }
+        [ -n "${prefix}" ] || { echo "::error::missing CAPSULE_BIN_NAME in ${capsule_mk}"; exit 1; }
+        derived_slugs="${derived_slugs} ${slug}"
+        derived_prefixes="${derived_prefixes} ${prefix}"
+    done < "${capsule_inventory}"
+    rm -f "${capsule_inventory}"
+    CAPSULE_SLUGS="${CAPSULE_SLUGS:-${derived_slugs}}"
+    CAPSULE_KEY_PREFIXES="${CAPSULE_KEY_PREFIXES:-${derived_prefixes}}"
 fi
+
+CAPSULE_SLUGS="$(printf '%s\n' "${CAPSULE_SLUGS}" | xargs)"
+CAPSULE_KEY_PREFIXES="$(printf '%s\n' "${CAPSULE_KEY_PREFIXES}" | xargs)"
 
 mkdir -p .keys
 mkdir -p nonos-data/trust/keys
 mkdir -p nonos-data/trust/policy
 mkdir -p nonos-data/trust/capsules
+mkdir -p target/ci/zk
 
 echo "[scratch-trust-bootstrap] building capsule-sign host tool"
 ( cd nonos-sign && cargo build --release --bin capsule-sign )
@@ -67,12 +79,25 @@ rm -f nonos-data/trust/policy/nonos_trust_anchor.policy.bin
 rm -f nonos-data/trust/capsules/*.nonos_id_cert.bin
 rm -f nonos-data/trust/capsules/*.manifest.bin
 
+echo "[scratch-trust-bootstrap] enrolling scratch boot identity"
+printf 'ci-scratch-device\n' > target/ci/zk/device_labels.txt
+make ZK_BOOT_LABELS=target/ci/zk/device_labels.txt \
+     ZK_BOOT_ROOT=target/ci/zk/device_root.bin \
+     ZK_BOOT_COMMITMENTS=target/ci/zk/device_commitments.bin \
+     ZK_BOOT_SECRETS=target/ci/zk/device_secrets.txt \
+     ZK_BOOT_ENROLL_SEED=nonos-ci-scratch-boot-enroll \
+     target/ci/zk/device_root.bin \
+     target/ci/zk/device_commitments.bin \
+     target/ci/zk/device_secrets.txt
+
 echo "[scratch-trust-bootstrap] building userland libc"
 make nonos-mk-libc
 
 echo "[scratch-trust-bootstrap] re-signing capsules: ${CAPSULE_SLUGS}"
 for slug in ${CAPSULE_SLUGS}; do
-    make "nonos-mk-${slug}-sign"
+    make ZK_CAPSULE_ENROLL_SEED=nonos-ci-scratch-capsule-enroll \
+         ZK_CAPSULE_NONCE_SEED=nonos-ci-scratch-capsule-nonce \
+         "nonos-mk-${slug}-sign"
 done
 
 echo "[scratch-trust-bootstrap] done"
