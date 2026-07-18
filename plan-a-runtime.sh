@@ -62,7 +62,12 @@ fi
   -serial "file:$SER" -display none -monitor none -no-reboot &
 QPID=$!
 
-DECISIVE='Hardware requirements not met|\[NONOS\] Handoff (OK|FAIL)|\[gfx\.virtio_gpu0\]|\[INIT\] Capsules spawned|KERNEL PANIC|PANIC'
+# Stop only on a terminal outcome. "Handoff OK" and the gpu bring-up line are
+# early progress, not the end of boot: matching them cut the run off ~15s after
+# handoff, long before all capsules finished spawning under TCG, so the ready
+# marker was never reached. Wait for the real end state instead: the ready
+# marker on success, or a panic / handoff failure / unmet hardware on failure.
+DECISIVE='Hardware requirements not met|\[NONOS\] Handoff FAIL|\[INIT\] Capsules spawned|KERNEL PANIC|PANIC'
 hit=""
 for i in $(seq 1 "$TIMEOUT"); do
   kill -0 "$QPID" 2>/dev/null || { hit="qemu-exited"; break; }
