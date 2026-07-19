@@ -1116,13 +1116,14 @@ else
 fi
 
 # Per-capsule production kernel build path. Every verified capsule
-# must declare a `microkernel-<slug>` Cargo feature and a matching
-# `nonos-mk-<slug>-prod` Makefile recipe. Any
-# obsolete hand-written `nonos-mk-<slug>:` override (without the
-# `-prod` or `-test` suffix) is rejected because the macro at
-# nonos-mk/capsule.mk owns that target name as the userland-ELF
-# builder; an override silently breaks the trust-chain workflow's
-# transparent-attestation loop.
+# must declare a `microkernel-<slug>` Cargo feature and have its
+# Capsule.mk included by the build (Makefile or mk/*.mk), which is
+# what enrols it in the aggregate attested build; the single-capsule
+# `-prod` wrappers were retired with the modular Makefile split. Any
+# obsolete hand-written `nonos-mk-<slug>:` override is rejected
+# because the macro at nonos-mk/capsule.mk owns that target name as
+# the userland-ELF builder; an override silently breaks the
+# trust-chain workflow's transparent-attestation loop.
 prod_missing=
 prod_overrides=
 for slug in proof-io ramfs keyring entropy crypto vfs market \
@@ -1133,10 +1134,11 @@ for slug in proof-io ramfs keyring entropy crypto vfs market \
     if ! grep -qE "^microkernel-${slug} = \[" Cargo.toml; then
         prod_missing="${prod_missing} microkernel-${slug}(feature)"
     fi
-    if ! grep -qE "^nonos-mk-${slug}-prod:" Makefile; then
-        prod_missing="${prod_missing} nonos-mk-${slug}-prod(target)"
+    cap_mk="$(grep -l "^CAPSULE_SLUG[[:space:]]*:=[[:space:]]*${slug}[[:space:]]*$" userland/*/Capsule.mk 2>/dev/null | head -1)"
+    if [ -z "${cap_mk}" ] || ! cat Makefile mk/*.mk 2>/dev/null | grep -q "include[[:space:]]\+${cap_mk}"; then
+        prod_missing="${prod_missing} ${slug}(Capsule.mk not included)"
     fi
-    if grep -qE "^nonos-mk-${slug}:" Makefile; then
+    if cat Makefile mk/*.mk 2>/dev/null | grep -qE "^nonos-mk-${slug}:"; then
         prod_overrides="${prod_overrides} nonos-mk-${slug}"
     fi
 done
@@ -1147,7 +1149,7 @@ if [ -n "${prod_overrides}" ]; then
     fail_with "obsolete hand-written kernel-build override(s) shadowing the macro target:${prod_overrides}"
 fi
 if [ -z "${prod_missing}" ] && [ -z "${prod_overrides}" ]; then
-    note ok "every verified capsule has a microkernel-<slug> feature + nonos-mk-<slug>-prod recipe; macro owns nonos-mk-<slug>"
+    note ok "every verified capsule has a microkernel-<slug> feature + an included Capsule.mk; macro owns nonos-mk-<slug>"
 fi
 unset prod_missing prod_overrides
 
@@ -2282,7 +2284,7 @@ else
         if [ ! -f "${cap_dir}/Capsule.mk" ]; then
             continue
         fi
-        if ! grep -q "include[[:space:]]\+${cap_dir}/Capsule\.mk" Makefile 2>/dev/null; then
+        if ! cat Makefile mk/*.mk 2>/dev/null | grep -q "include[[:space:]]\+${cap_dir}/Capsule\.mk"; then
             continue
         fi
         if ! grep -q "${cap_dir}" "${matrix}"; then

@@ -20,7 +20,16 @@ set -euo pipefail
 
 if [ -z "${CAPSULE_SLUGS:-}" ] || [ -z "${CAPSULE_KEY_PREFIXES:-}" ]; then
     capsule_inventory="$(mktemp)"
-    awk '/^include userland\/.*\/Capsule\.mk$/ { print $2 }' Makefile > "${capsule_inventory}"
+    # The capsule includes live in the top-level Makefile or, since the
+    # modular split, in mk/*.mk; scan both so the inventory survives either
+    # layout. An empty inventory would mean zero publisher keys and every
+    # capsule key check downstream failing, so treat it as fatal here.
+    cat Makefile mk/*.mk 2>/dev/null \
+        | awk '/^include userland\/.*\/Capsule\.mk$/ { print $2 }' > "${capsule_inventory}"
+    if ! [ -s "${capsule_inventory}" ]; then
+        echo "::error::no capsule includes found in Makefile or mk/*.mk"
+        exit 1
+    fi
     derived_slugs=""
     derived_prefixes=""
     while IFS= read -r capsule_mk; do
