@@ -4306,6 +4306,19 @@ if ! python3 scripts/check_cap_parity.py; then
 fi
 note ok "kernel, nonos_cap and nonos_manifest capability tables agree"
 
+# The docs publish the same table. A reader who grants what the page says gets
+# what the kernel says, so a stale page is a silent wrong answer, not a typo.
+if ! python3 scripts/check_docs_caps.py; then
+    fail_with "the documented capability table disagrees with the kernel"
+fi
+note ok "documented capability table agrees with the kernel"
+
+# The syscall ABI is what a foreign toolchain reads to call this kernel.
+if ! python3 scripts/check_syscall_abi.py; then
+    fail_with "abi/syscalls.toml contradicts the syscalls the kernel dispatches"
+fi
+note ok "abi/syscalls.toml agrees with the kernel"
+
 libc_sys_numbers='userland/libc/src/syscall/numbers'
 if [ ! -d "${libc_sys_numbers}" ]; then
     fail_with "missing ${libc_sys_numbers}"
