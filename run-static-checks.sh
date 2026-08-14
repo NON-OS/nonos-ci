@@ -4282,24 +4282,42 @@ else
 fi
 unset graphics_sys_abi key value kv
 
-graphics_caps_abi='abi/caps.toml'
-if [ ! -f "${graphics_caps_abi}" ]; then
-    fail_with "missing ${graphics_caps_abi}"
-else
-    for kv in \
-        'GRAPHICS_DISPLAY_QUERY=0x0000_0000_0000_0800' \
-        'GRAPHICS_SURFACE_CREATE=0x0000_0000_0000_1000' \
-        'GRAPHICS_SURFACE_MAP=0x0000_0000_0000_2000' \
-        'GRAPHICS_PRESENT=0x0000_0000_0000_4000'; do
-        key="${kv%%=*}"
-        value="${kv##*=}"
-        if ! grep -qE "^${key}[[:space:]]*=[[:space:]]*${value}$" "${graphics_caps_abi}"; then
-            fail_with "${graphics_caps_abi} missing ${key}=${value} in [bits]"
-        fi
-    done
-    note ok "abi/caps.toml carries graphics capability bits aligned to runtime"
+# Compares every published bit against src/capabilities/types/bit.rs rather than
+# against four values written into this script. The old form checked its own copy
+# of the answer, so it passed while the file gave TIME the bit the kernel uses for
+# Network, and while 22 capabilities went unpublished.
+if ! python3 scripts/check_caps_abi.py --allow-stale-groups; then
+    fail_with "abi/caps.toml contradicts the capability bits the kernel enforces"
 fi
-unset graphics_caps_abi key value kv
+note ok "abi/caps.toml agrees with the kernel capability table"
+
+# The service-layer CAP_* constants are tested against the same PCB bitmap, so a
+# constant written as an independent 1<<N is whichever kernel capability owns that
+# bit. Three live gates were aliased this way and one could never open.
+if ! python3 scripts/check_service_caps.py; then
+    fail_with "a service capability gate tests a capability it does not name"
+fi
+note ok "service capability constants bind to real kernel bits"
+
+# The kernel table, the name capsules declare with, and the name the signing
+# tool resolves must agree. They had already drifted by six capabilities once.
+if ! python3 scripts/check_cap_parity.py; then
+    fail_with "kernel and userland capability tables disagree"
+fi
+note ok "kernel, nonos_cap and nonos_manifest capability tables agree"
+
+# The docs publish the same table. A reader who grants what the page says gets
+# what the kernel says, so a stale page is a silent wrong answer, not a typo.
+if ! python3 scripts/check_docs_caps.py; then
+    fail_with "the documented capability table disagrees with the kernel"
+fi
+note ok "documented capability table agrees with the kernel"
+
+# The syscall ABI is what a foreign toolchain reads to call this kernel.
+if ! python3 scripts/check_syscall_abi.py; then
+    fail_with "abi/syscalls.toml contradicts the syscalls the kernel dispatches"
+fi
+note ok "abi/syscalls.toml agrees with the kernel"
 
 libc_sys_numbers='userland/libc/src/syscall/numbers'
 if [ ! -d "${libc_sys_numbers}" ]; then
