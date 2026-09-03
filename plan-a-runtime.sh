@@ -4,6 +4,10 @@
 # a virtio-gpu + virtio-rng device, no host port forwarding, and a
 # graceful shutdown so the synthetic FAT / NVRAM are never corrupted
 # mid-write. Captures serial and reports the substrate marker chain.
+# -u only, deliberately: this is a boot harness, and the exit codes of
+# qemu, timeout, and the marker greps are inspected as data on guarded
+# paths below. -e would turn an interesting boot outcome into a silent
+# abort before the report runs. Every failure path exits explicitly.
 set -u
 cd "$(dirname "$0")/.."
 
